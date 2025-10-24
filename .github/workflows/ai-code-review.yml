@@ -36,8 +36,6 @@ on:
                 required: true
             OPENAI_API_KEY:
                 required: false
-            GITHUB_TOKEN:
-                required: true
 
 jobs:
     ai-review:
