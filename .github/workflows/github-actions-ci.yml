@@ -1,24 +1,123 @@
-﻿name: Validate Workflows
+﻿name: GitHub Actions Validation
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  validate:
+  validate-workflows:
+    name: Validate Workflow Files
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install yamllint
         run: pip install yamllint
-      
-      - name: Validate YAML
+
+      - name: Validate workflow YAML
         run: |
+          echo "🔍 Validating workflow files..."
           find .github/workflows -name "*.yml" -exec yamllint {} \;
+          echo "✅ Workflows valid"
+
+      - name: Validate action YAML
+        run: |
+          echo "🔍 Validating composite actions..."
           find actions -name "action.yml" -exec yamllint {} \;
-      
-      - name: Check Python
-        run: find actions -name "*.py" -exec python -m py_compile {} \;
+          echo "✅ Actions valid"
+
+  test-python:
+    name: Test Python Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          find actions -type f -name "requirements.txt" -exec pip install -r {} \; || true
+          pip install flake8
+
+      - name: Lint Python
+        continue-on-error: true
+        run: |
+          echo "🔍 Linting Python scripts..."
+          find actions -name "*.py" -exec flake8 --max-line-length=120 {} \; || true
+
+      - name: Check Python syntax
+        run: |
+          echo "🐍 Checking Python syntax..."
+          find actions -name "*.py" -exec python -m py_compile {} \;
+          echo "✅ Python syntax valid"
+
+  validate-structure:
+    name: Validate Repository Structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files
+        run: |
+          echo "📋 Checking repository structure..."
+          [ -f "README.md" ] && echo "✅ README.md exists" || exit 1
+          [ -d ".github/workflows" ] && echo "✅ .github/workflows/ exists" || exit 1
+          [ -d "actions" ] && echo "✅ actions/ exists" || exit 1
+
+          echo ""
+          echo "📄 Reusable workflows:"
+          grep -l "workflow_call" .github/workflows/*.yml 2>/dev/null | xargs -n1 basename || echo "  (none found)"
+
+          echo ""
+          echo "🔧 Composite actions:"
+          find actions -name "action.yml" 2>/dev/null | xargs dirname | xargs -n1 basename || echo "  (none found)"
+
+      - name: Validate action metadata
+        run: |
+          echo "🔍 Validating action metadata..."
+          find actions -name "action.yml" | while read file; do
+            echo "Checking: $file"
+            grep -q "^name:" "$file" || { echo "❌ Missing 'name' in $file"; exit 1; }
+            grep -q "^description:" "$file" || { echo "❌ Missing 'description' in $file"; exit 1; }
+            grep -q "runs:" "$file" || { echo "❌ Missing 'runs' in $file"; exit 1; }
+          done
+          echo "✅ All actions have valid metadata"
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-workflows, test-python, validate-structure]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎯 Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate-workflows.result }}" == "success" ]; then
+            echo "✅ **Workflow Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Workflow Validation**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test-python.result }}" == "success" ]; then
+            echo "✅ **Python Scripts**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Python Scripts**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.validate-structure.result }}" == "success" ]; then
+            echo "✅ **Repository Structure**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Repository Structure**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: markethub-platform/github-actions" >> $GITHUB_STEP_SUMMARY
+          echo "**Purpose**: Centralized workflows and composite actions" >> $GITHUB_STEP_SUMMARY
