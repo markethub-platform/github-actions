@@ -43,7 +43,7 @@ jobs:
                     echo "⚠️ Security vulnerabilities found!"
                     echo "💡 Run 'npm audit' locally to see details"
                     echo "💡 Run 'npm audit fix' to attempt automatic fixes"
-                    
+
                     if [ "${{ inputs.fail_on_vulnerabilities }}" == "true" ]; then
                       echo "❌ Failing due to security vulnerabilities"
                       exit $EXIT_CODE
@@ -66,7 +66,7 @@ jobs:
                     EXIT_CODE=$?
                     echo "⚠️ Security vulnerabilities found!"
                     echo "💡 Review the output above for details"
-                    
+
                     if [ "${{ inputs.fail_on_vulnerabilities }}" == "true" ]; then
                       echo "❌ Failing due to security vulnerabilities"
                       exit $EXIT_CODE

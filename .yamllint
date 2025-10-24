@@ -8,7 +8,7 @@ rules:
   document-start:
     present: false
   truthy:
-    allowed-values: ['true', 'false', 'on']
+    allowed-values: ["true", "false", "on"]
   trailing-spaces: enable
   indentation:
     spaces: consistent

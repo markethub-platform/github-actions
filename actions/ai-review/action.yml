@@ -50,9 +50,11 @@ runs:
         echo "🤖 Running AI code review with ${{ inputs.ai_model }}..."
 
         if [ "${{ inputs.ai_model }}" = "claude" ]; then
-          python ${{ github.action_path }}/scripts/ai_review_claude_sonnet.py "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+          python ${{ github.action_path }}/scripts/ai_review_claude_sonnet.py \
+            "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
         elif [ "${{ inputs.ai_model }}" = "gpt4o" ]; then
-          python ${{ github.action_path }}/scripts/ai_review_gpt4o.py "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+          python ${{ github.action_path }}/scripts/ai_review_gpt4o.py \
+            "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
         else
           echo "❌ Unsupported AI model: ${{ inputs.ai_model }}"
           exit 1
