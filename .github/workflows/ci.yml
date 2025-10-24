@@ -22,24 +22,23 @@ jobs:
           # Install yamllint
           pip install yamllint
 
-          # Create yamllint config
-          cat > .yamllint.yml << 'EOF'
-          extends: default
-          rules:
-            line-length:
-              max: 200
-              level: warning
-            comments:
-              min-spaces-from-content: 1
-            indentation:
-              spaces: consistent
-              indent-sequences: whatever
-            truthy:
-              allowed-values: ['true', 'false', 'on']
-            document-start: disable
-          EOF
-
-          # Validate all workflow files
+                  # Create yamllint config
+                  cat > .yamllint.yml << 'EOF'
+                  extends: default
+                  rules:
+                    line-length:
+                      max: 200
+                      level: warning
+                    comments:
+                      min-spaces-from-content: 1
+                    indentation:
+                      spaces: consistent
+                      indent-sequences: whatever
+                    truthy:
+                      allowed-values: ['true', 'false', 'on']
+                    document-start: disable
+                    trailing-spaces: disable
+                  EOF          # Validate all workflow files
           find .github/workflows -name "*.yml" -o -name "*.yaml" | while read file; do
             echo "Checking $file..."
             yamllint -c .yamllint.yml "$file"
