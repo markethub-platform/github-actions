@@ -1,0 +1,91 @@
+name: AI Code Review
+
+on:
+    workflow_call:
+        inputs:
+            language:
+                description: "Programming language (typescript, javascript, python, dart)"
+                required: true
+                type: string
+            source_dir:
+                description: "Source directory to review"
+                required: true
+                type: string
+            ai_model:
+                description: "AI model to use (claude or gpt4o)"
+                required: false
+                type: string
+                default: "claude"
+            create_issues:
+                description: "Create GitHub issues for critical findings"
+                required: false
+                type: boolean
+                default: true
+            verify_fixes:
+                description: "Verify and auto-close fixed issues with 3-confirmation system"
+                required: false
+                type: boolean
+                default: true
+            max_chars:
+                description: "Maximum characters to review"
+                required: false
+                type: number
+                default: 100000
+        secrets:
+            ANTHROPIC_API_KEY:
+                required: true
+            OPENAI_API_KEY:
+                required: false
+            GITHUB_TOKEN:
+                required: true
+
+jobs:
+    ai-review:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        permissions:
+            contents: read
+            pull-requests: write
+            issues: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Extract code
+              id: extract
+              uses: markethub-platform/github-actions/actions/extract-code@main
+              with:
+                  language: ${{ inputs.language }}
+                  source_dir: ${{ inputs.source_dir }}
+                  max_chars: ${{ inputs.max_chars }}
+
+            - name: AI code review
+              uses: markethub-platform/github-actions/actions/ai-review@main
+              with:
+                  code_file: ${{ steps.extract.outputs.code_file }}
+                  ai_model: ${{ inputs.ai_model }}
+                  pr_number: ${{ github.event.pull_request.number || 'push' }}
+                  anthropic_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  openai_key: ${{ secrets.OPENAI_API_KEY }}
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  github_repository: ${{ github.repository }}
+                  create_issues: ${{ inputs.create_issues }}
+
+            - name: Verify fixed issues
+              if: ${{ inputs.verify_fixes }}
+              uses: markethub-platform/github-actions/actions/verify-fixes@main
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  github_repository: ${{ github.repository }}
+
+            - name: Summary
+              if: always()
+              run: |
+                  echo "## 🤖 AI Code Review Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Language:** ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Files Extracted:** ${{ steps.extract.outputs.files_count }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **AI Model:** ${{ inputs.ai_model }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Issues Created:** ${{ inputs.create_issues }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Fix Verification:** ${{ inputs.verify_fixes }}" >> $GITHUB_STEP_SUMMARY

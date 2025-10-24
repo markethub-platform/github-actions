@@ -1,0 +1,39 @@
+name: Verify Fixed Issues
+description: Verifies if AI-reported issues have been fixed using 3-confirmation system
+author: MarketHub Platform
+
+inputs:
+  github_token:
+    description: "GitHub token for API access"
+    required: true
+  github_repository:
+    description: "Repository in format owner/repo"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        echo "📦 Installing requests library..."
+        pip install -q requests
+
+    - name: Verify fixes
+      shell: bash
+      run: |
+        if [ -f ai_review_output.txt ]; then
+          echo "🔍 Verifying fixed issues with 3-confirmation system..."
+          python ${{ github.action_path }}/scripts/ai_verify_fixes.py ai_review_output.txt
+          echo "✅ Verification complete"
+        else
+          echo "⏭️ No AI review output found, skipping verification"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_REPOSITORY: ${{ inputs.github_repository }}

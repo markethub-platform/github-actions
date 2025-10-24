@@ -1,0 +1,86 @@
+name: Extract Code for Review
+description: Extracts source code files for AI review
+author: MarketHub Platform
+
+inputs:
+  language:
+    description: "Programming language (typescript, javascript, python, dart)"
+    required: true
+  source_dir:
+    description: "Source directory to extract code from"
+    required: true
+  max_chars:
+    description: "Maximum characters to extract"
+    required: false
+    default: "100000"
+
+outputs:
+  code_file:
+    description: "Path to extracted code file"
+    value: ${{ steps.extract.outputs.code_file }}
+  files_count:
+    description: "Number of files extracted"
+    value: ${{ steps.extract.outputs.files_count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Extract code files
+      id: extract
+      shell: bash
+      run: |
+        echo "📋 Extracting ${{ inputs.language }} code from ${{ inputs.source_dir }}..."
+
+        # Determine file extensions based on language
+        case "${{ inputs.language }}" in
+          typescript|javascript)
+            PATTERN="\( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \)"
+            ;;
+          python)
+            PATTERN="-name '*.py'"
+            ;;
+          dart)
+            PATTERN="-name '*.dart'"
+            ;;
+          *)
+            echo "❌ Unsupported language: ${{ inputs.language }}"
+            exit 1
+            ;;
+        esac
+
+        # Find all matching files
+        eval "find ${{ inputs.source_dir }} -type f $PATTERN" > files.txt || true
+
+        if [ ! -s files.txt ]; then
+          echo "⚠️ No code files found"
+          echo "# No code files found" > code.txt
+          echo "code_file=code.txt" >> $GITHUB_OUTPUT
+          echo "files_count=0" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Count files
+        FILES_COUNT=$(wc -l < files.txt)
+        echo "📄 Found $FILES_COUNT files"
+
+        # Combine all files with markers
+        while read -r file; do
+          echo "=== FILE: $file ===" >> code.txt
+          cat "$file" >> code.txt
+          echo "" >> code.txt
+          echo "" >> code.txt
+        done < files.txt
+
+        # Truncate if too large
+        CURRENT_SIZE=$(wc -c < code.txt)
+        if [ $CURRENT_SIZE -gt ${{ inputs.max_chars }} ]; then
+          echo "⚠️ Code size ($CURRENT_SIZE) exceeds limit (${{ inputs.max_chars}}), truncating..."
+          head -c ${{ inputs.max_chars }} code.txt > temp.txt
+          mv temp.txt code.txt
+          echo "" >> code.txt
+          echo "=== [TRUNCATED - Exceeded ${{ inputs.max_chars }} character limit] ===" >> code.txt
+        fi
+
+        echo "✅ Extracted $FILES_COUNT files ($CURRENT_SIZE characters)"
+        echo "code_file=code.txt" >> $GITHUB_OUTPUT
+        echo "files_count=$FILES_COUNT" >> $GITHUB_OUTPUT

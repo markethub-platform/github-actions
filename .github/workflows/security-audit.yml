@@ -1,0 +1,88 @@
+name: Security Audit
+
+on:
+    workflow_call:
+        inputs:
+            language:
+                description: "Package ecosystem (npm, python, maven, etc)"
+                required: true
+                type: string
+            working_directory:
+                description: "Directory to run audit in"
+                required: false
+                type: string
+                default: "."
+            severity:
+                description: "Minimum severity level (low, moderate, high, critical)"
+                required: false
+                type: string
+                default: "critical"
+            fail_on_vulnerabilities:
+                description: "Fail the job if vulnerabilities are found"
+                required: false
+                type: boolean
+                default: true
+
+jobs:
+    audit:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: npm security audit
+              if: ${{ inputs.language == 'npm' || inputs.language == 'node' }}
+              working-directory: ${{ inputs.working_directory }}
+              run: |
+                  echo "🔒 Running npm security audit (level: ${{ inputs.severity }})..."
+
+                  npm audit --audit-level=${{ inputs.severity }} || {
+                    EXIT_CODE=$?
+                    echo "⚠️ Security vulnerabilities found!"
+                    echo "💡 Run 'npm audit' locally to see details"
+                    echo "💡 Run 'npm audit fix' to attempt automatic fixes"
+                    
+                    if [ "${{ inputs.fail_on_vulnerabilities }}" == "true" ]; then
+                      echo "❌ Failing due to security vulnerabilities"
+                      exit $EXIT_CODE
+                    else
+                      echo "⚠️ Continuing despite vulnerabilities (fail_on_vulnerabilities=false)"
+                      exit 0
+                    fi
+                  }
+
+                  echo "✅ No ${{ inputs.severity }} or higher vulnerabilities found"
+
+            - name: pip security audit
+              if: ${{ inputs.language == 'pip' || inputs.language == 'python' }}
+              working-directory: ${{ inputs.working_directory }}
+              run: |
+                  echo "🔒 Running pip security audit..."
+                  pip install pip-audit
+
+                  pip-audit || {
+                    EXIT_CODE=$?
+                    echo "⚠️ Security vulnerabilities found!"
+                    echo "💡 Review the output above for details"
+                    
+                    if [ "${{ inputs.fail_on_vulnerabilities }}" == "true" ]; then
+                      echo "❌ Failing due to security vulnerabilities"
+                      exit $EXIT_CODE
+                    else
+                      echo "⚠️ Continuing despite vulnerabilities (fail_on_vulnerabilities=false)"
+                      exit 0
+                    fi
+                  }
+
+                  echo "✅ No vulnerabilities found"
+
+            - name: Summary
+              if: always()
+              run: |
+                  echo "## 🔒 Security Audit Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Ecosystem:** ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Severity Level:** ${{ inputs.severity }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Fail on Vulns:** ${{ inputs.fail_on_vulnerabilities }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,81 @@
+name: AI Code Review
+description: Runs AI-powered code review using Claude or GPT-4
+author: MarketHub Platform
+
+inputs:
+  code_file:
+    description: "Path to extracted code file"
+    required: true
+  ai_model:
+    description: "AI model to use (claude or gpt4o)"
+    required: false
+    default: "claude"
+  pr_number:
+    description: 'Pull request number or "push"'
+    required: true
+  anthropic_key:
+    description: "Anthropic API key for Claude"
+    required: true
+  openai_key:
+    description: "OpenAI API key for GPT-4"
+    required: false
+  github_token:
+    description: "GitHub token for API access"
+    required: true
+  github_repository:
+    description: "Repository in format owner/repo"
+    required: true
+  create_issues:
+    description: "Create GitHub issues for critical findings"
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        echo "📦 Installing Python dependencies..."
+        pip install -q -r ${{ github.action_path }}/scripts/requirements.txt
+
+    - name: Run AI review
+      shell: bash
+      run: |
+        echo "🤖 Running AI code review with ${{ inputs.ai_model }}..."
+
+        if [ "${{ inputs.ai_model }}" = "claude" ]; then
+          python ${{ github.action_path }}/scripts/ai_review_claude_sonnet.py "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+        elif [ "${{ inputs.ai_model }}" = "gpt4o" ]; then
+          python ${{ github.action_path }}/scripts/ai_review_gpt4o.py "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+        else
+          echo "❌ Unsupported AI model: ${{ inputs.ai_model }}"
+          exit 1
+        fi
+
+        echo "✅ AI review complete"
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_key }}
+        OPENAI_API_KEY: ${{ inputs.openai_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_REPOSITORY: ${{ inputs.github_repository }}
+
+    - name: Create GitHub issues
+      if: inputs.create_issues == 'true'
+      shell: bash
+      run: |
+        if [ -f ai_review_output.txt ] && [ "${{ inputs.pr_number }}" != "push" ]; then
+          echo "📝 Creating GitHub issues for critical findings..."
+          python ${{ github.action_path }}/scripts/ai_review_to_issues.py ai_review_output.txt "${{ inputs.pr_number }}"
+          echo "✅ Issues created"
+        else
+          echo "⏭️ Skipping issue creation (no review output or push event)"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_REPOSITORY: ${{ inputs.github_repository }}

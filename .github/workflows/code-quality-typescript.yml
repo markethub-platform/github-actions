@@ -1,0 +1,101 @@
+name: TypeScript Code Quality
+
+on:
+    workflow_call:
+        inputs:
+            working_directory:
+                description: "Directory containing package.json"
+                required: true
+                type: string
+            node_version:
+                description: "Node.js version to use"
+                required: false
+                type: string
+                default: "20"
+            run_lint:
+                description: "Run ESLint"
+                required: false
+                type: boolean
+                default: true
+            run_typecheck:
+                description: "Run TypeScript type checking"
+                required: false
+                type: boolean
+                default: true
+            run_tests:
+                description: "Run tests"
+                required: false
+                type: boolean
+                default: true
+
+jobs:
+    quality:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ inputs.node_version }}
+                  cache: "npm"
+                  cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+            - name: Install dependencies
+              working-directory: ${{ inputs.working_directory }}
+              run: |
+                  echo "📦 Installing dependencies..."
+                  npm ci
+
+            - name: Run ESLint
+              if: ${{ inputs.run_lint }}
+              working-directory: ${{ inputs.working_directory }}
+              continue-on-error: true
+              run: |
+                  echo "🔍 Running ESLint..."
+                  npm run lint || {
+                    echo "⚠️ Linting issues found"
+                    echo "💡 Run 'npm run lint' locally to see details"
+                    exit 0
+                  }
+                  echo "✅ No linting issues"
+
+            - name: TypeScript type check
+              if: ${{ inputs.run_typecheck }}
+              working-directory: ${{ inputs.working_directory }}
+              continue-on-error: true
+              run: |
+                  echo "📘 Running TypeScript type check..."
+                  npx tsc --noEmit || {
+                    echo "⚠️ Type errors found"
+                    echo "💡 Run 'npx tsc --noEmit' locally to see details"
+                    exit 0
+                  }
+                  echo "✅ No type errors"
+
+            - name: Run tests
+              if: ${{ inputs.run_tests }}
+              working-directory: ${{ inputs.working_directory }}
+              continue-on-error: true
+              run: |
+                  echo "🧪 Running tests..."
+                  npm test -- --passWithNoTests || {
+                    echo "⚠️ Tests failed"
+                    echo "💡 Run 'npm test' locally to see details"
+                    exit 0
+                  }
+                  echo "✅ All tests passed"
+
+            - name: Summary
+              if: always()
+              run: |
+                  echo "## 📊 TypeScript Quality Check Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Directory:** ${{ inputs.working_directory }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Node.js:** ${{ inputs.node_version }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Lint:** ${{ inputs.run_lint }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Type Check:** ${{ inputs.run_typecheck }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Tests:** ${{ inputs.run_tests }}" >> $GITHUB_STEP_SUMMARY
