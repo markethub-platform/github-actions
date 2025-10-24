@@ -20,13 +20,13 @@ jobs:
       - name: Validate workflow YAML
         run: |
           echo "🔍 Validating workflow files..."
-          find .github/workflows -name "*.yml" -exec yamllint {} \;
+          find .github/workflows -name "*.yml" -exec yamllint -c .yamllint {} \;
           echo "✅ Workflows valid"
 
       - name: Validate action YAML
         run: |
           echo "🔍 Validating composite actions..."
-          find actions -name "action.yml" -exec yamllint {} \;
+          find actions -name "action.yml" -exec yamllint -c .yamllint {} \;
           echo "✅ Actions valid"
 
   test-python:
