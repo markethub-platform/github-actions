@@ -30,20 +30,20 @@ def extract_problem_pattern(current_code, suggested_fix):
     
     # Normalize code: remove whitespace, comments, lowercase
     pattern = current_code.lower()
-    pattern = re.sub(r'//.*?\n', '', pattern)  # Remove single-line comments
-    pattern = re.sub(r'/\*.*?\*/', '', pattern, flags=re.DOTALL)  # Remove multi-line comments
-    pattern = re.sub(r'\s+', ' ', pattern)  # Normalize whitespace
+    pattern = re.sub(r'//.*?\n', '', pattern)
+    pattern = re.sub(r'/\*.*?\*/', '', pattern, flags=re.DOTALL)
+    pattern = re.sub(r'\s+', ' ', pattern)
     pattern = pattern.strip()
     
-    # Extract patterns by priority (more stable indicators of the issue)
+    # Extract patterns by priority
     key_patterns = []
     
-    # HIGH PRIORITY: React hooks (most stable, issue-defining patterns)
+    # HIGH PRIORITY: React hooks
     hooks = re.findall(r'use\w+\s*\(', pattern)
     if hooks:
         key_patterns.extend([f"HOOK:{h}" for h in sorted(set(hooks))])
     
-    # HIGH PRIORITY: Critical browser APIs (memory leak indicators)
+    # HIGH PRIORITY: Critical browser APIs
     critical_apis = re.findall(
         r'(window\.|document\.|addEventListener|removeEventListener|setInterval|clearInterval|setTimeout|clearTimeout|AbortController)\s*[\(\.]',
         pattern
@@ -51,7 +51,7 @@ def extract_problem_pattern(current_code, suggested_fix):
     if critical_apis:
         key_patterns.extend([f"API:{api}" for api in sorted(set(critical_apis))[:5]])
     
-    # MEDIUM PRIORITY: Async patterns (race condition indicators)
+    # MEDIUM PRIORITY: Async patterns
     async_patterns = re.findall(
         r'(async|await|fetch|axios|promise|\.then|\.catch)\s*[\(\.]',
         pattern,
@@ -68,7 +68,7 @@ def extract_problem_pattern(current_code, suggested_fix):
     if state_patterns:
         key_patterns.extend([f"STATE:{sp}" for sp in sorted(set(state_patterns))[:3]])
     
-    # LOW PRIORITY: General function calls (only if nothing else found)
+    # LOW PRIORITY: General function calls
     if len(key_patterns) < 3:
         functions = re.findall(r'\w+\s*\(', pattern)
         key_patterns.extend([f"FN:{fn}" for fn in sorted(set(functions))[:3]])
@@ -78,18 +78,15 @@ def extract_problem_pattern(current_code, suggested_fix):
         assignments = re.findall(r'(const|let|var)\s+\w+\s*=', pattern)
         key_patterns.extend([f"VAR:{a}" for a in sorted(set(assignments))[:2]])
     
-    return '|'.join(key_patterns[:10])  # Max 10 patterns for stable fingerprints
+    return '|'.join(key_patterns[:10])
 
 def categorize_issue(issue_title, problem_description, code):
     """
     Categorize the issue type for better matching
     Enhanced with aliases for better detection
-    
-    Returns: category string (e.g., "memory-leak", "type-error", "security")
     """
     combined_text = f"{issue_title} {problem_description} {code}".lower()
     
-    # Define category patterns with aliases
     categories = {
         'memory-leak': [
             'memory leak', 'missing cleanup', 'cleanup in useeffect', 'effect cleanup',
@@ -134,14 +131,12 @@ def categorize_issue(issue_title, problem_description, code):
         ]
     }
     
-    # Find matching category (with scoring for multiple matches)
     category_scores = {}
     for category, keywords in categories.items():
         score = sum(1 for keyword in keywords if keyword in combined_text)
         if score > 0:
             category_scores[category] = score
     
-    # Return category with highest score
     if category_scores:
         return max(category_scores, key=category_scores.get)
     
@@ -149,37 +144,22 @@ def categorize_issue(issue_title, problem_description, code):
 
 def generate_issue_fingerprint(file_path, issue_title, problem, current_code, suggested_fix):
     """
-    Generate unique fingerprint for an issue based on:
-    - File path
-    - Problem category
-    - Code pattern
-    - Normalized title
+    Generate unique fingerprint for an issue
     """
-    # Normalize file path (remove line numbers, etc.)
     normalized_file = re.sub(r':\d+', '', file_path)
-    
-    # Extract problem pattern from code
     problem_pattern = extract_problem_pattern(current_code, suggested_fix)
-    
-    # Categorize issue
     category = categorize_issue(issue_title, problem, current_code)
-    
-    # Normalize title
     normalized_title = normalize_title(issue_title)
     
-    # Create fingerprint components
     components = [
         normalized_file,
         category,
-        problem_pattern[:100],  # First 100 chars of pattern
-        normalized_title[:50]   # First 50 chars of title
+        problem_pattern[:100],
+        normalized_title[:50]
     ]
     
-    # Generate hash
     fingerprint_str = '|'.join(components)
     fingerprint = hashlib.sha256(fingerprint_str.encode()).hexdigest()[:12]
-    
-    # Also create a simple ID for backwards compatibility
     simple_id = hashlib.md5(f"{file_path}:{issue_title}".encode()).hexdigest()[:8]
     
     return {
@@ -196,40 +176,20 @@ def generate_issue_fingerprint(file_path, issue_title, problem, current_code, su
 
 def normalize_title(title):
     """Normalize title for comparison"""
-    # Remove [AI] prefix and emoji
-    title = re.sub(r'^\[AI\]\s*ðŸ”´\s*', '', title)
-    # Lowercase
+    title = re.sub(r'^\[AI\]\s*🔴\s*', '', title)
     title = title.lower()
-    # Remove special chars
     title = re.sub(r'[^\w\s-]', '', title)
-    # Normalize whitespace
     return ' '.join(title.split())
 
 def titles_are_similar(title1, title2, threshold=0.85, same_context=False):
-    """
-    Check if two titles are similar using sequence matching
-    
-    Args:
-        title1: First title
-        title2: Second title
-        threshold: Base similarity threshold (0.0-1.0)
-        same_context: True if same file AND same category (more lenient)
-    
-    Returns:
-        bool: True if titles are similar enough
-    """
+    """Check if two titles are similar"""
     norm1 = normalize_title(title1)
     norm2 = normalize_title(title2)
     
     if not norm1 or not norm2:
         return False
     
-    # Adjust threshold based on context
-    # Same file + category = more likely to be duplicate, be more lenient
-    effective_threshold = threshold
-    if same_context:
-        effective_threshold = 0.75  # More lenient (catches more variations)
-    
+    effective_threshold = 0.75 if same_context else threshold
     similarity = SequenceMatcher(None, norm1, norm2).ratio()
     
     return similarity >= effective_threshold
@@ -263,12 +223,11 @@ def get_all_ai_issues(repo, token, limit=200):
             issues = response.json()
             all_issues.extend(issues)
             
-            # Stop if we hit the limit
             if len(all_issues) >= limit:
                 break
                 
         except Exception as e:
-            print(f"âš ï¸ Error fetching {state} issues: {e}")
+            print(f"Warning: Error fetching {state} issues: {e}")
     
     return all_issues[:limit]
 
@@ -276,23 +235,18 @@ def extract_issue_metadata(issue):
     """Extract metadata from existing issue"""
     body = issue.get('body', '')
     
-    # Extract AI-ID (simple ID)
     simple_id_match = re.search(r'AI-ID:\s*(\w+)', body)
     simple_id = simple_id_match.group(1) if simple_id_match else None
     
-    # Extract fingerprint (new system)
     fingerprint_match = re.search(r'FINGERPRINT:\s*(\w+)', body)
     fingerprint = fingerprint_match.group(1) if fingerprint_match else None
     
-    # Extract file path
     file_match = re.search(r'\*\*File:\*\*\s*`([^`]+)`', body)
     file_path = file_match.group(1) if file_match else ''
     
-    # Extract category
     category_match = re.search(r'CATEGORY:\s*(\w+[-\w]*)', body)
     category = category_match.group(1) if category_match else 'general'
     
-    # Extract reopen count
     reopen_match = re.search(r'Reopened:\s*(\d+)\s*times', body)
     reopen_count = int(reopen_match.group(1)) if reopen_match else 0
     
@@ -313,10 +267,7 @@ def extract_issue_metadata(issue):
 
 def find_matching_issue(all_issues, new_issue_data):
     """
-    Find matching issue using multiple strategies:
-    1. Exact fingerprint match (best)
-    2. Simple ID match (backwards compatibility)
-    3. Fuzzy match (same file + similar title + same category)
+    Find matching issue using multiple strategies
     """
     new_fp = new_issue_data['fingerprint_data']
     
@@ -332,11 +283,11 @@ def find_matching_issue(all_issues, new_issue_data):
             exact_match = metadata
             break
         
-        # Strategy 2: Simple ID match (backwards compatibility)
+        # Strategy 2: Simple ID match
         if metadata['simple_id'] and metadata['simple_id'] == new_fp['simple_id']:
             simple_match = metadata
         
-        # Strategy 3: Fuzzy match (same file + similar title + same category)
+        # Strategy 3: Fuzzy match
         same_context = (metadata['file_path'] == new_fp['file'] and 
                        metadata['category'] == new_fp['category'])
         
@@ -346,13 +297,11 @@ def find_matching_issue(all_issues, new_issue_data):
                              threshold=0.85, same_context=same_context)):
             fuzzy_matches.append(metadata)
     
-    # Return best match
     if exact_match:
         return exact_match, 'exact'
     elif simple_match:
         return simple_match, 'simple'
     elif fuzzy_matches:
-        # Return most recently updated fuzzy match
         fuzzy_matches.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return fuzzy_matches[0], 'fuzzy'
     
@@ -377,12 +326,11 @@ def add_comment(repo, token, issue_number, comment_body):
         response.raise_for_status()
         return True
     except Exception as e:
-        print(f"âš ï¸ Failed to comment on issue #{issue_number}: {e}")
+        print(f"Warning: Failed to comment on issue #{issue_number}: {e}")
         return False
 
 def remove_label(repo, token, issue_number, label):
     """Remove a label from an issue"""
-    # URL encode the label
     encoded_label = requests.utils.quote(label)
     url = f"https://api.github.com/repos/{repo}/issues/{issue_number}/labels/{encoded_label}"
     headers = {
@@ -396,7 +344,7 @@ def remove_label(repo, token, issue_number, label):
             response.raise_for_status()
         return True
     except Exception as e:
-        print(f"âš ï¸ Failed to remove label {label} from issue #{issue_number}: {e}")
+        print(f"Warning: Failed to remove label {label}: {e}")
         return False
 
 def add_label(repo, token, issue_number, label):
@@ -412,14 +360,11 @@ def add_label(repo, token, issue_number, label):
         response.raise_for_status()
         return True
     except Exception as e:
-        print(f"⚠️ Failed to add label {label} to issue #{issue_number}: {e}")
+        print(f"Warning: Failed to add label {label}: {e}")
         return False
 
 def reopen_issue(repo, token, existing_issue, match_type, pr_number):
-    """
-    Reopen a closed issue when problem reappears
-    Tracks reopen count and flags recurring issues
-    """
+    """Reopen a closed issue when problem reappears"""
     issue_number = existing_issue['number']
     url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
     headers = {
@@ -427,27 +372,22 @@ def reopen_issue(repo, token, existing_issue, match_type, pr_number):
         "Accept": "application/vnd.github.v3+json"
     }
     
-    # Calculate reopen count
     reopen_count = existing_issue.get('reopen_count', 0) + 1
     
-    # Reopen the issue
     try:
         response = requests.patch(url, headers=headers, json={"state": "open"})
         response.raise_for_status()
     except Exception as e:
-        print(f"âŒ Failed to reopen issue #{issue_number}: {e}")
+        print(f"Failed to reopen issue #{issue_number}: {e}")
         return False
     
-    # Remove old confirmation labels
     for label in ["ai-not-seen-1x", "ai-not-seen-2x", "ai-not-seen-3x"]:
         remove_label(repo, token, issue_number, label)
     
-    # Add "recurring" label if reopened 3+ times
     if reopen_count >= 3 and "recurring" not in existing_issue.get('labels', []):
         add_label(repo, token, issue_number, "recurring")
-        print(f"   âš ï¸ Flagged as recurring (reopened {reopen_count}x)")
+        print(f"   Flagged as recurring (reopened {reopen_count}x)")
     
-    # Determine match explanation
     match_explanations = {
         'exact': 'exact code fingerprint match',
         'simple': 'issue ID match',
@@ -455,13 +395,11 @@ def reopen_issue(repo, token, existing_issue, match_type, pr_number):
     }
     match_explanation = match_explanations.get(match_type, 'pattern match')
     
-    # Build reopening comment with enhanced context
     timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     
-    # Different messages based on reopen count
     if reopen_count >= 3:
         severity_warning = f"""
-### âš ï¸ **RECURRING ISSUE - {reopen_count}x DETECTION**
+### ⚠️ **RECURRING ISSUE - {reopen_count}x DETECTION**
 
 This issue has been **reopened {reopen_count} times**, indicating a **recurring problem** that requires deeper investigation.
 
@@ -474,14 +412,14 @@ This issue has been **reopened {reopen_count} times**, indicating a **recurring 
 """
     elif reopen_count == 2:
         severity_warning = f"""
-### âš ï¸ Second Detection
+### ⚠️ Second Detection
 
 This is the **second time** this issue has been reopened. If it occurs again (3+ times), it will be flagged as **recurring** and may need architectural changes.
 """
     else:
         severity_warning = ""
     
-    comment = f"""## ðŸ”„ Issue Automatically Reopened ({reopen_count}x)
+    comment = f"""## 🔄 Issue Automatically Reopened ({reopen_count}x)
 
 **Detected:** {timestamp}  
 **Match Type:** {match_explanation.title()}  
@@ -493,18 +431,18 @@ This is the **second time** this issue has been reopened. If it occurs again (3+
 ---
 {severity_warning}
 
-### ðŸ“Š What Happened
+### 📊 What Happened
 
 This issue was previously resolved and closed after 3 confirmations. However, the **same problem pattern has been re-detected** in the codebase.
 
-### ðŸ” Detection Method
+### 🔍 Detection Method
 
 The AI code review system identified this issue using **{match_explanation}**, indicating:
-- âœ… Same file location
-- âœ… Same problem category
-- âœ… Similar or identical code pattern
+- Same file location
+- Same problem category
+- Similar or identical code pattern
 
-### ðŸ¤” Possible Causes
+### 🤔 Possible Causes
 
 1. **Code Regression:** Recent changes reintroduced the bug
 2. **Refactoring:** Code was restructured and issue came back
@@ -512,7 +450,7 @@ The AI code review system identified this issue using **{match_explanation}**, i
 4. **Incomplete Fix:** Original fix didn't address root cause
 5. **Conflicting Changes:** Parallel work overwrote the fix
 
-### âœ… Next Steps
+### ✅ Next Steps
 
 1. **Review Original Fix:** Check what was done before (see issue history)
 2. **Analyze Recent Changes:** Review commits since last closure
@@ -521,7 +459,7 @@ The AI code review system identified this issue using **{match_explanation}**, i
 5. **Verify:** Commit changes and AI will re-verify
 6. **Auto-Close:** Issue closes automatically after 3 confirmations
 
-### ðŸ“ˆ Tracking
+### 📈 Tracking
 
 **Verification Counter:** Reset to 0/3  
 **Status:** Waiting for fix  
@@ -534,7 +472,7 @@ The AI code review system identified this issue using **{match_explanation}**, i
     
     add_comment(repo, token, issue_number, comment)
     
-    print(f"âœ… Reopened issue #{issue_number} (match: {match_type}, count: {reopen_count}x)")
+    print(f"Reopened issue #{issue_number} (match: {match_type}, count: {reopen_count}x)")
     
     return True
 
@@ -548,23 +486,21 @@ def create_new_issue(repo, token, issue_data, pr_number):
     
     fp = issue_data['fingerprint_data']
     
-    # Build comprehensive issue body
-    body = f"""## ðŸ¤– AI-Detected Critical Issue
+    body = f"""## 🤖 AI-Detected Critical Issue
 
 **File:** `{issue_data['file_path']}`  
 **Category:** {fp['category'].replace('-', ' ').title()}
 
 ---
 
-### ðŸ”´ Problem Description
+### 🔴 Problem Description
 
 {issue_data['problem']}
 """
     
     if issue_data['current_code']:
         body += f"""
-### ðŸ“„ Current Code
-
+### 📄 Current Code
 ```typescript
 {issue_data['current_code']}
 ```
@@ -572,8 +508,7 @@ def create_new_issue(repo, token, issue_data, pr_number):
     
     if issue_data['suggested_fix']:
         body += f"""
-### âœ… Suggested Fix
-
+### ✅ Suggested Fix
 ```typescript
 {issue_data['suggested_fix']}
 ```
@@ -581,7 +516,7 @@ def create_new_issue(repo, token, issue_data, pr_number):
     
     if issue_data['reasoning']:
         body += f"""
-### ðŸ’¡ Why This Matters
+### 💡 Why This Matters
 
 {issue_data['reasoning']}
 """
@@ -590,32 +525,32 @@ def create_new_issue(repo, token, issue_data, pr_number):
 
 ---
 
-### ðŸ“Š Issue Metadata
+### 📊 Issue Metadata
 
 **Detection Info:**
-- ðŸ¤– **Detected by:** AI Code Review (Claude Sonnet 4.5)
-- ðŸ”´ **Severity:** Critical
-- ðŸ“ **Category:** `{fp['category']}`
-- ðŸ” **Pattern:** `{fp['pattern'][:50]}...` 
+- 🤖 **Detected by:** AI Code Review (Claude Sonnet 4.5)
+- 🔴 **Severity:** Critical
+- 📁 **Category:** `{fp['category']}`
+- 🔍 **Pattern:** `{fp['pattern'][:50]}...` 
 
 **Tracking IDs:**
-- ðŸ†” **AI-ID:** `{fp['simple_id']}`
-- ðŸ” **FINGERPRINT:** `{fp['fingerprint']}`
-- ðŸ“‚ **CATEGORY:** `{fp['category']}`
+- 🆔 **AI-ID:** `{fp['simple_id']}`
+- 🔐 **FINGERPRINT:** `{fp['fingerprint']}`
+- 📂 **CATEGORY:** `{fp['category']}`
 """
     
     if pr_number:
-        body += f"\n- ðŸ“‹ **Related PR:** #{pr_number}"
+        body += f"\n- 📋 **Related PR:** #{pr_number}"
     
     body += """
 
 ---
 
-### ðŸŽ¯ Resolution Process
+### 🎯 Resolution Process
 
-**Current Status:** â³ Waiting for fix  
-**Verification:** ðŸ” AI will auto-verify when fixed  
-**Auto-close:** âœ… After 3 consecutive confirmations
+**Current Status:** ⏳ Waiting for fix  
+**Verification:** 🔍 AI will auto-verify when fixed  
+**Auto-close:** ✅ After 3 consecutive confirmations
 
 **Your Action Items:**
 1. Review the suggested fix above
@@ -632,7 +567,7 @@ def create_new_issue(repo, token, issue_data, pr_number):
 
 ---
 
-### ðŸ·ï¸ Issue Fingerprinting
+### 🏷️ Issue Fingerprinting
 
 This issue uses **advanced fingerprinting** to prevent duplicates:
 - Tracks code patterns, not just titles
@@ -655,10 +590,10 @@ This issue uses **advanced fingerprinting** to prevent duplicates:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
         issue = response.json()
-        print(f"âœ… Created NEW issue #{issue['number']}: {issue_data['title']}")
+        print(f"Created NEW issue #{issue['number']}: {issue_data['title']}")
         return issue['number']
     except Exception as e:
-        print(f"âŒ Failed to create issue: {e}")
+        print(f"Failed to create issue: {e}")
         if hasattr(e, 'response') and e.response:
             print(f"   Response: {e.response.text}")
         return None
@@ -667,7 +602,7 @@ def handle_existing_open_issue(repo, token, existing_issue, pr_number):
     """Add comment to existing open issue"""
     timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     
-    comment = f"""## ðŸ”„ Issue Still Present
+    comment = f"""## 🔄 Issue Still Present
 
 **Re-detected:** {timestamp}  
 **Context:** PR #{pr_number if pr_number else 'Push to main'}
@@ -676,13 +611,13 @@ def handle_existing_open_issue(repo, token, existing_issue, pr_number):
 
 This issue is **still present** in the latest code review.
 
-### ðŸ“Š Status
+### 📊 Status
 
 **Current State:** Open (not yet fixed)  
 **Detection Count:** Multiple detections  
 **Verification:** Counter reset (if was tracking)
 
-### ðŸ’¡ Recommended Actions
+### 💡 Recommended Actions
 
 1. **Prioritize This Fix:** Issue detected multiple times
 2. **Review Suggested Solution:** See original issue description above
@@ -693,12 +628,11 @@ This issue is **still present** in the latest code review.
 ---
 *Automated detection by AI code review system*"""
     
-    # Reset verification counter if exists
     for label in ["ai-not-seen-1x", "ai-not-seen-2x"]:
         remove_label(repo, token, existing_issue['number'], label)
     
     add_comment(repo, token, existing_issue['number'], comment)
-    print(f"â„¹ï¸ Issue #{existing_issue['number']} still open - added update comment")
+    print(f"Issue #{existing_issue['number']} still open - added update comment")
     return existing_issue['number']
 
 # ============================================
@@ -706,34 +640,30 @@ This issue is **still present** in the latest code review.
 # ============================================
 
 def parse_ai_review(review_text):
-    """Parse AI review and extract critical issues with all metadata"""
+    """Parse AI review and extract critical issues"""
     issues = []
     
-    critical_pattern = r'\*\*ðŸ”´ CRITICAL:\s*([^\*\n]+)\*\*'
+    critical_pattern = r'\*\*🔴 CRITICAL:\s*([^\*\n]+)\*\*'
     sections = review_text.split('## File:')
     
     for section in sections[1:]:
-        # Extract file path
         file_match = re.search(r'`([^`]+)`', section)
         if not file_match:
             continue
         file_path = file_match.group(1)
         
-        # Find all critical issues
         for match in re.finditer(critical_pattern, section, re.IGNORECASE):
             issue_title = match.group(1).strip()
             
-            # Extract issue block
             start_pos = match.start()
-            next_issue = section.find('**ðŸ”´', start_pos + 10)
-            next_perf = section.find('**ðŸŸ¡', start_pos)
-            next_enhance = section.find('**ðŸ”µ', start_pos)
+            next_issue = section.find('**🔴', start_pos + 10)
+            next_perf = section.find('**🟡', start_pos)
+            next_enhance = section.find('**🔵', start_pos)
             next_file = len(section)
             
             end_pos = min([p for p in [next_issue, next_perf, next_enhance, next_file] if p > start_pos])
             issue_block = section[start_pos:end_pos].strip()
             
-            # Extract metadata
             problem_match = re.search(r'\*\*Problem:\*\*\s*([^\n]+)', issue_block)
             problem = problem_match.group(1).strip() if problem_match else 'See AI review for details'
             
@@ -750,12 +680,10 @@ def parse_ai_review(review_text):
             why_match = re.search(r'\*\*Why:\*\*\s*([^\n]+)', issue_block)
             reasoning = why_match.group(1).strip() if why_match else ''
             
-            # Generate fingerprint
             fingerprint_data = generate_issue_fingerprint(
                 file_path, issue_title, problem, current_code, suggested_fix
             )
             
-            # Determine labels
             labels = ['ai-review', 'critical', 'bug', fingerprint_data['category']]
             if 'frontend' in file_path or any(ext in file_path for ext in ['.tsx', '.jsx', '.ts', '.js']):
                 labels.append('frontend')
@@ -767,13 +695,13 @@ def parse_ai_review(review_text):
                 labels.append('hooks')
             
             issues.append({
-                'title': f"[AI] ðŸ”´ {issue_title}",
+                'title': f"[AI] 🔴 {issue_title}",
                 'file_path': file_path,
                 'problem': problem,
                 'current_code': current_code,
                 'suggested_fix': suggested_fix,
                 'reasoning': reasoning,
-                'labels': list(set(labels)),  # Remove duplicates
+                'labels': list(set(labels)),
                 'fingerprint_data': fingerprint_data
             })
     
@@ -781,35 +709,32 @@ def parse_ai_review(review_text):
 
 def main(review_file, pr_number):
     """Main function with advanced duplicate prevention"""
-    # Read AI review
     try:
         with open(review_file, 'r', encoding='utf-8') as f:
             review_text = f.read()
     except FileNotFoundError:
-        print(f"âŒ Review file not found: {review_file}")
+        print(f"Review file not found: {review_file}")
         return
     
     if not review_text.strip():
-        print("â„¹ï¸ No review content found")
+        print("No review content found")
         return
     
-    # Parse issues
-    print("ðŸ” Parsing AI review for critical issues...")
+    print("Parsing AI review for critical issues...")
     new_issues = parse_ai_review(review_text)
     
     if not new_issues:
-        print("âœ… No critical issues found! Code looks good.")
+        print("No critical issues found! Code looks good.")
         return
     
-    print(f"ðŸ“‹ Found {len(new_issues)} critical issue(s) in review")
+    print(f"Found {len(new_issues)} critical issue(s) in review")
     
-    # Get GitHub credentials
     repo = os.getenv("GITHUB_REPOSITORY")
     token = os.getenv("GITHUB_TOKEN")
     
     if not repo or not token:
-        print("âš ï¸ Missing GitHub repository or token")
-        print("\nðŸ“„ Issues that would be created:")
+        print("Missing GitHub repository or token")
+        print("\nIssues that would be created:")
         for i, issue in enumerate(new_issues, 1):
             fp = issue['fingerprint_data']
             print(f"\n{i}. {issue['title']}")
@@ -818,12 +743,10 @@ def main(review_file, pr_number):
             print(f"   Fingerprint: {fp['fingerprint']}")
         return
     
-    # Get all existing AI issues (both open and closed)
-    print("\nðŸ” Fetching existing AI issues (open and closed)...")
+    print("\nFetching existing AI issues (open and closed)...")
     all_existing_issues = get_all_ai_issues(repo, token, limit=200)
-    print(f"ðŸ“Š Found {len(all_existing_issues)} existing AI issue(s)")
+    print(f"Found {len(all_existing_issues)} existing AI issue(s)")
     
-    # Process each new issue
     created_count = 0
     reopened_count = 0
     updated_count = 0
@@ -837,43 +760,38 @@ def main(review_file, pr_number):
         print(f"   File: {issue_data['file_path']}")
         print(f"   Category: {issue_data['fingerprint_data']['category']}")
         
-        # Find matching issue
         existing, match_type = find_matching_issue(all_existing_issues, issue_data)
         
         if existing:
             print(f"   Match found: #{existing['number']} (type: {match_type})")
             
             if existing['state'] == 'open':
-                # Issue already open - add comment
                 handle_existing_open_issue(repo, token, existing, pr_number)
                 updated_count += 1
             else:
-                # Issue was closed - reopen it
                 reopen_issue(repo, token, existing, match_type, pr_number)
                 reopened_count += 1
         else:
-            # No match - create new issue
             print("   No match found - creating new issue")
             issue_num = create_new_issue(repo, token, issue_data, pr_number)
             if issue_num:
                 created_count += 1
     
-    # Summary
     print("\n" + "="*70)
-    print("ðŸ“Š PROCESSING SUMMARY")
+    print("PROCESSING SUMMARY")
     print("="*70)
-    print(f"   ðŸ†• New issues created: {created_count}")
-    print(f"   ðŸ”„ Closed issues reopened: {reopened_count}")
-    print(f"   ðŸ“ Open issues updated: {updated_count}")
-    print(f"   ðŸ“‹ Total processed: {len(new_issues)}")
+    print(f"   New issues created: {created_count}")
+    print(f"   Closed issues reopened: {reopened_count}")
+    print(f"   Open issues updated: {updated_count}")
+    print(f"   Total processed: {len(new_issues)}")
     print("="*70)
     
     if created_count > 0:
-        print(f"\nðŸŽ‰ Created {created_count} new issue(s)")
+        print(f"\nCreated {created_count} new issue(s)")
     if reopened_count > 0:
-        print(f"\nðŸ”„ Reopened {reopened_count} previously closed issue(s)")
+        print(f"\nReopened {reopened_count} previously closed issue(s)")
     if updated_count > 0:
-        print(f"\nðŸ“ Updated {updated_count} existing open issue(s)")
+        print(f"\nUpdated {updated_count} existing open issue(s)")
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
