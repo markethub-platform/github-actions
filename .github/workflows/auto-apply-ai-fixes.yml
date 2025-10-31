@@ -1,0 +1,65 @@
+name: Auto-Apply AI Fixes
+
+on:
+    workflow_dispatch: # Manual trigger
+        inputs:
+            max_fixes:
+                description: "Maximum number of fixes to apply"
+                required: false
+                default: "10"
+    schedule:
+        - cron: "0 2 * * *" # Run daily at 2 AM UTC (optional)
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+
+jobs:
+    apply-ai-fixes:
+        name: Apply AI-Suggested Fixes
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout Target Repository
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ github.repository }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  fetch-depth: 0
+
+            - name: Checkout AI Scripts
+              uses: actions/checkout@v4
+              with:
+                  repository: markethub-platform/github-actions
+                  path: .github-actions-scripts
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install Dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install requests
+
+            - name: Configure Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Apply AI Fixes
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+              run: |
+                  python .github-actions-scripts/actions/ai-review/scripts/apply_ai_fixes.py .
+
+            - name: Summary
+              if: always()
+              run: |
+                  echo "## 🤖 AI Fix Application Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "Check the PR created by this workflow for applied fixes." >> $GITHUB_STEP_SUMMARY
