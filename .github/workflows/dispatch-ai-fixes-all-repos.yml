@@ -1,0 +1,105 @@
+name: 🤖 Auto-Fix All Repos
+
+on:
+    workflow_dispatch: # Manual trigger - one button to fix all repos!
+        inputs:
+            repos:
+                description: 'Repositories to fix (comma-separated or "all")'
+                required: false
+                default: "all"
+            max_fixes_per_repo:
+                description: "Maximum fixes per repository"
+                required: false
+                default: "20"
+
+permissions:
+    contents: write
+    issues: write
+    pull-requests: write
+
+jobs:
+    dispatch-fixes:
+        name: Dispatch AI Fixes to Repositories
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Determine Target Repos
+              id: repos
+              run: |
+                  INPUT_REPOS="${{ github.event.inputs.repos }}"
+
+                  if [ "$INPUT_REPOS" = "all" ] || [ -z "$INPUT_REPOS" ]; then
+                    REPOS="markethub-web,markethub-mobile,markethub-backend"
+                  else
+                    REPOS="$INPUT_REPOS"
+                  fi
+
+                  echo "repos=$REPOS" >> $GITHUB_OUTPUT
+                  echo "### 🎯 Target Repositories" >> $GITHUB_STEP_SUMMARY
+                  echo "$REPOS" | tr ',' '\n' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+
+            - name: Trigger Fix for markethub-web
+              if: contains(steps.repos.outputs.repos, 'markethub-web')
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      try {
+                        await github.rest.actions.createWorkflowDispatch({
+                          owner: 'markethub-platform',
+                          repo: 'markethub-web',
+                          workflow_id: 'auto-apply-ai-fixes.yml',
+                          ref: 'main'
+                        });
+                        core.info('✅ Triggered auto-fix for markethub-web');
+                      } catch (error) {
+                        core.warning(`⚠️ Could not trigger markethub-web: ${error.message}`);
+                      }
+
+            - name: Trigger Fix for markethub-mobile
+              if: contains(steps.repos.outputs.repos, 'markethub-mobile')
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      try {
+                        await github.rest.actions.createWorkflowDispatch({
+                          owner: 'markethub-platform',
+                          repo: 'markethub-mobile',
+                          workflow_id: 'auto-apply-ai-fixes.yml',
+                          ref: 'main'
+                        });
+                        core.info('✅ Triggered auto-fix for markethub-mobile');
+                      } catch (error) {
+                        core.warning(`⚠️ Could not trigger markethub-mobile: ${error.message}`);
+                      }
+
+            - name: Trigger Fix for markethub-backend
+              if: contains(steps.repos.outputs.repos, 'markethub-backend')
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      try {
+                        await github.rest.actions.createWorkflowDispatch({
+                          owner: 'markethub-platform',
+                          repo: 'markethub-backend',
+                          workflow_id: 'auto-apply-ai-fixes.yml',
+                          ref: 'main'
+                        });
+                        core.info('✅ Triggered auto-fix for markethub-backend');
+                      } catch (error) {
+                        core.warning(`⚠️ Could not trigger markethub-backend: ${error.message}`);
+                      }
+
+            - name: Summary
+              run: |
+                  echo "## ✅ Dispatch Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "Auto-fix workflows triggered in target repositories." >> $GITHUB_STEP_SUMMARY
+                  echo "Check each repo's Actions tab for progress and PRs." >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
+                  echo "1. Go to each repo's Actions tab" >> $GITHUB_STEP_SUMMARY
+                  echo "2. Monitor 'Auto-Apply AI Fixes' workflow" >> $GITHUB_STEP_SUMMARY
+                  echo "3. Review and merge created PRs" >> $GITHUB_STEP_SUMMARY
