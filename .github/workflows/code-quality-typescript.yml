@@ -63,32 +63,32 @@ jobs:
           }
           echo "✅ No linting issues"
 
-      - name: TypeScript type check
-        if: ${{ inputs.run_typecheck }}
-        working-directory: ${{ inputs.working_directory }}
-        continue-on-error: false
-        run: |
-          echo "📘 Running TypeScript type check..."
-          npx tsc --noEmit || {
-            echo "❌ Type errors found - BLOCKING PR"
-            echo "💡 Run 'npx tsc --noEmit' locally to see details"
-            echo "💡 Fix all TypeScript errors before merging"
-            exit 1
-          }
-          echo "✅ No type errors"
+            - name: TypeScript type check
+              if: ${{ inputs.run_typecheck }}
+              working-directory: ${{ inputs.working_directory }}
+              continue-on-error: false
+              run: |
+                  echo "📘 Running TypeScript type check..."
+                  npx tsc -b --force || {
+                    echo "❌ Type errors found - BLOCKING PR"
+                    echo "💡 Run 'npx tsc -b' locally to see details"
+                    echo "💡 Fix all TypeScript errors before merging"
+                    exit 1
+                  }
+                  echo "✅ No type errors"
 
-      - name: Run tests
-        if: ${{ inputs.run_tests }}
-        working-directory: ${{ inputs.working_directory }}
-        continue-on-error: true
-        run: |
-          echo "🧪 Running tests..."
-          npm test -- --passWithNoTests || {
-            echo "⚠️ Tests failed"
-            echo "💡 Run 'npm test' locally to see details"
-            exit 0
-          }
-          echo "✅ All tests passed"
+            - name: Run tests
+              if: ${{ inputs.run_tests }}
+              working-directory: ${{ inputs.working_directory }}
+              continue-on-error: true
+              run: |
+                  echo "🧪 Running tests..."
+                  npm test -- --passWithNoTests || {
+                    echo "⚠️ Tests failed"
+                    echo "💡 Run 'npm test' locally to see details"
+                    exit 0
+                  }
+                  echo "✅ All tests passed"
 
       - name: Summary
         if: always()
