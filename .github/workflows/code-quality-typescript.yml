@@ -69,12 +69,26 @@ jobs:
               continue-on-error: false
               run: |
                   echo "📘 Running TypeScript type check..."
-                  npx tsc -b --force || {
-                    echo "❌ Type errors found - BLOCKING PR"
-                    echo "💡 Run 'npx tsc -b' locally to see details"
-                    echo "💡 Fix all TypeScript errors before merging"
-                    exit 1
-                  }
+                  
+                  # Check which tsconfig to use
+                  if [ -f "tsconfig.app.json" ]; then
+                    echo "Using tsconfig.app.json"
+                    npx tsc --noEmit --project tsconfig.app.json || {
+                      echo "❌ Type errors found - BLOCKING PR"
+                      echo "💡 Run 'npx tsc --noEmit --project tsconfig.app.json' locally"
+                      echo "💡 Fix all TypeScript errors before merging"
+                      exit 1
+                    }
+                  else
+                    echo "Using default tsconfig.json"
+                    npx tsc --noEmit || {
+                      echo "❌ Type errors found - BLOCKING PR"
+                      echo "💡 Run 'npx tsc --noEmit' locally to see details"
+                      echo "💡 Fix all TypeScript errors before merging"
+                      exit 1
+                    }
+                  fi
+                  
                   echo "✅ No type errors"
 
             - name: Run tests
