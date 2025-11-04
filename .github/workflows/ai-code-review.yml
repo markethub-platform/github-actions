@@ -16,16 +16,6 @@ on:
                 required: false
                 type: string
                 default: "claude"
-            create_issues:
-                description: "Create GitHub issues for critical findings"
-                required: false
-                type: boolean
-                default: true
-            verify_fixes:
-                description: "Verify and auto-close fixed issues with 3-confirmation system"
-                required: false
-                type: boolean
-                default: true
             max_chars:
                 description: "Maximum characters to review"
                 required: false
@@ -68,14 +58,6 @@ jobs:
                   openai_key: ${{ secrets.OPENAI_API_KEY }}
                   github_token: ${{ secrets.GITHUB_TOKEN }}
                   github_repository: ${{ github.repository }}
-                  create_issues: ${{ inputs.create_issues }}
-
-            - name: Verify fixed issues
-              if: ${{ inputs.verify_fixes }}
-              uses: markethub-platform/github-actions/actions/verify-fixes@main
-              with:
-                  github_token: ${{ secrets.GITHUB_TOKEN }}
-                  github_repository: ${{ github.repository }}
 
             - name: Summary
               if: always()
@@ -85,5 +67,3 @@ jobs:
                   echo "- **Language:** ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
                   echo "- **Files Extracted:** ${{ steps.extract.outputs.files_count }}" >> $GITHUB_STEP_SUMMARY
                   echo "- **AI Model:** ${{ inputs.ai_model }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Issues Created:** ${{ inputs.create_issues }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Fix Verification:** ${{ inputs.verify_fixes }}" >> $GITHUB_STEP_SUMMARY

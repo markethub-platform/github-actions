@@ -25,10 +25,6 @@ inputs:
   github_repository:
     description: "Repository in format owner/repo"
     required: true
-  create_issues:
-    description: "Create GitHub issues for critical findings"
-    required: false
-    default: "true"
 
 runs:
   using: composite
@@ -64,20 +60,5 @@ runs:
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_key }}
         OPENAI_API_KEY: ${{ inputs.openai_key }}
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        GITHUB_REPOSITORY: ${{ inputs.github_repository }}
-
-    - name: Create GitHub issues
-      if: inputs.create_issues == 'true'
-      shell: bash
-      run: |
-        if [ -f ai_review_output.txt ] && [ "${{ inputs.pr_number }}" != "push" ]; then
-          echo "📝 Creating GitHub issues for critical findings..."
-          python ${{ github.action_path }}/scripts/ai_review_to_issues.py ai_review_output.txt "${{ inputs.pr_number }}"
-          echo "✅ Issues created"
-        else
-          echo "⏭️ Skipping issue creation (no review output or push event)"
-        fi
-      env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GITHUB_REPOSITORY: ${{ inputs.github_repository }}
