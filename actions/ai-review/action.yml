@@ -10,6 +10,10 @@ inputs:
     description: "AI model to use (claude or gpt4o)"
     required: false
     default: "claude"
+  language:
+    description: "Programming language (typescript/javascript/nodejs/dart)"
+    required: false
+    default: "javascript"
   pr_number:
     description: 'Pull request number or "push"'
     required: true
@@ -43,14 +47,18 @@ runs:
     - name: Run AI review
       shell: bash
       run: |
-        echo "🤖 Running AI code review with ${{ inputs.ai_model }}..."
+        echo "🤖 Running AI code review with ${{ inputs.ai_model }} for ${{ inputs.language }}..."
 
         if [ "${{ inputs.ai_model }}" = "claude" ]; then
           python ${{ github.action_path }}/scripts/ai_review_claude_sonnet.py \
-            "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+            "${{ inputs.code_file }}" \
+            "${{ inputs.pr_number }}" \
+            "${{ inputs.language }}"
         elif [ "${{ inputs.ai_model }}" = "gpt4o" ]; then
           python ${{ github.action_path }}/scripts/ai_review_gpt4o.py \
-            "${{ inputs.code_file }}" "${{ inputs.pr_number }}"
+            "${{ inputs.code_file }}" \
+            "${{ inputs.pr_number }}" \
+            "${{ inputs.language }}"
         else
           echo "❌ Unsupported AI model: ${{ inputs.ai_model }}"
           exit 1

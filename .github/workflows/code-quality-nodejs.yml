@@ -1,0 +1,48 @@
+name: Node.js Code Quality
+
+on:
+    workflow_call:
+        inputs:
+            working-directory:
+                description: "Working directory for Node.js project"
+                required: false
+                type: string
+                default: "."
+            node-version:
+                description: "Node.js version to use"
+                required: false
+                type: string
+                default: "20.x"
+
+jobs:
+    lint-and-test:
+        runs-on: ubuntu-latest
+
+        defaults:
+            run:
+                working-directory: ${{ inputs.working-directory }}
+
+        steps:
+            - name: 📥 Checkout code
+              uses: actions/checkout@v4
+
+            - name: 🔧 Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ inputs.node-version }}
+                  cache: "npm"
+                  cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+            - name: 📦 Install dependencies
+              run: npm ci
+
+            - name: 🔍 Run ESLint
+              run: npm run lint
+              continue-on-error: false
+
+            - name: 🧪 Run tests
+              run: npm test
+              continue-on-error: false
+
+            - name: ✅ Code quality passed
+              run: echo "✅ All code quality checks passed!"
